@@ -153,6 +153,10 @@ CASH_CURRENCY="USD"
 class BrokerageAction(enum.Enum):
     # Please keep these alphabetized:
     ADR_MGMT_FEE = "ADR Mgmt Fee"
+    ATM_REBATE = 'Schwab ATM Rebate'
+    ATM_WITHDRAWAL = "ATM Withdrawal"
+    AUTO_S1_CREDIT = 'Auto S1 Credit'
+    AUTO_S1_DEBIT = 'Auto S1 Debit'
     BANK_INTEREST = "Bank Interest"
     BOND_INTEREST = "Bond Interest"
     BUY = "Buy"
@@ -160,24 +164,26 @@ class BrokerageAction(enum.Enum):
     BUY_TO_OPEN = "Buy to Open"
     CASH_DIVIDEND = "Cash Dividend"
     CASH_IN_LIEU = "Cash In Lieu"
+    CREDIT_INTEREST = "Credit Interest"
     EXPIRED = "Expired"
     FOREIGN_TAX_PAID = "Foreign Tax Paid"
+    FUNDS_RECEIVED = "Funds Received"
     JOURNAL = "Journal"
     JOURNALED_SHARES = "Journaled Shares"
     LONG_TERM_CAP_GAIN = "Long Term Cap Gain"
     LONG_TERM_CAP_GAIN_REINVEST = "Long Term Cap Gain Reinvest"
     MARGIN_INTEREST = "Margin Interest"
-    CREDIT_INTEREST = "Credit Interest"
     MISC_CASH_ENTRY = "Misc Cash Entry"
     MONEYLINK_DEPOSIT = "MoneyLink Deposit"
     MONEYLINK_TRANSFER = "MoneyLink Transfer"
+    NON_QUALIFIED_DIVIDEND = "Non-Qualified Div"
+    NRA_TAX_ADJ = 'NRA Tax Adj'
     PRIOR_YEAR_CASH_DIVIDEND = "Pr Yr Cash Div"
     PRIOR_YEAR_DIV_REINVEST = "Pr Yr Div Reinvest"
     PRIOR_YEAR_SPECIAL_DIVIDEND = "Pr Yr Special Div"
     PROMOTIONAL_AWARD = "Promotional Award"
     QUAL_DIV_REINVEST = "Qual Div Reinvest"
     QUALIFIED_DIVIDEND = "Qualified Dividend"
-    NON_QUALIFIED_DIVIDEND = "Non-Qualified Div"
     REINVEST_DIVIDEND = "Reinvest Dividend"
     REINVEST_SHARES = "Reinvest Shares"
     REVERSE_SPLIT = "Reverse Split"
@@ -192,9 +198,11 @@ class BrokerageAction(enum.Enum):
     STOCK_MERGER = "Stock Merger"
     STOCK_PLAN_ACTIVITY = "Stock Plan Activity"
     STOCK_SPLIT = "Stock Split"
+    VISA_CREDIT = "Visa Credit"
+    VISA_PURCHASE = "Visa Purchase"
     WIRE_FUNDS = "Wire Funds"
     WIRE_FUNDS_RECEIVED = "Wire Funds Received"
-    FUNDS_RECEIVED = "Funds Received"
+    WIRE_RECEIVED = "Wire Received"
 
 class BankingEntryType(enum.Enum):
     # Please keep these alphabetized:
@@ -370,7 +378,15 @@ class RawBrokerageEntry(RawEntry):
                            BrokerageAction.SECURITY_TRANSFER,
                            BrokerageAction.WIRE_FUNDS,
                            BrokerageAction.WIRE_FUNDS_RECEIVED,
-                           BrokerageAction.FUNDS_RECEIVED):
+                           BrokerageAction.FUNDS_RECEIVED,
+                           BrokerageAction.WIRE_RECEIVED,
+                           BrokerageAction.NRA_TAX_ADJ,
+                           BrokerageAction.VISA_CREDIT,
+                           BrokerageAction.VISA_PURCHASE,
+                           BrokerageAction.ATM_WITHDRAWAL,
+                           BrokerageAction.ATM_REBATE,
+                           BrokerageAction.AUTO_S1_CREDIT,
+                           BrokerageAction.AUTO_S1_DEBIT):
             return Transfer(**shared_attrs)
         if self.action in (BrokerageAction.SELL,
                             BrokerageAction.SELL_TO_OPEN,
@@ -1530,7 +1546,6 @@ def _load_transactions(filename: str) -> List[RawEntry]:
         "Price",
         "Fees & Comm",
         "Amount",
-        "",
     ]
     expected_banking_field_names = [
         "Date",
@@ -1549,9 +1564,13 @@ def _load_transactions(filename: str) -> List[RawEntry]:
         assert match, title
         account = match.groupdict()["account"]
         reader = csv.DictReader(csvfile)
-        if reader.fieldnames == expected_brokerage_field_names:
+        brokerdiff = set(expected_brokerage_field_names).difference(set(reader.fieldnames))
+        bankingdiff = set(expected_banking_field_names).difference(set(reader.fieldnames))
+        
+        
+        if not brokerdiff:
             entries = _load_brokerage_transactions(reader, account, filename)
-        elif reader.fieldnames == expected_banking_field_names:
+        elif not bankingdiff:
             entries = _load_banking_transactions(reader, account, filename)
         else:
             raise RuntimeError(f"Unexpected header {reader.fieldnames}")
@@ -1740,35 +1759,14 @@ def _load_positions_csv(
 ) -> Sequence[RawPosition]:
     expected_field_names = [
         "Symbol",
-        "Description",
         "Quantity",
         "Price",
-        "Price Change $",
-        "Price Change %",
         "Market Value",
-        "Day Change $",
-        "Day Change %",
-        "Cost Basis",
-        "Gain/Loss $",
-        "Gain/Loss %",
-        "Reinvest Dividends?",
-        "Capital Gains?",
-        "% Of Account",
-        "Dividend Yield",
-        "Last Dividend",
-        "Ex-Dividend Date",
-        "P/E Ratio",
-        "52 Week Low",
-        "52 Week High",
-        "Volume",
-        "Intrinsic Value",
-        "In The Money",
-        "Security Type",
-        "",
     ]
     csvfile = StringIO("\n".join(lines))
     reader = csv.DictReader(csvfile)
-    assert reader.fieldnames == expected_field_names, reader.fieldnames
+    diff = set(expected_field_names).difference(set(reader.fieldnames))
+    assert len(diff) == 0
     entries = []
     found_account_total = False
     for lno, row in enumerate(reader):
