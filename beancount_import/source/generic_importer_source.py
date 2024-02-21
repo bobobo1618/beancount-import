@@ -59,6 +59,9 @@ class ImporterSource(DescriptionBasedSource):
     def prepare(self, journal: 'JournalEditor', results: SourceResults) -> None:
         results.add_account(self.account)
 
+        for e in journal.all_entries:
+            self._add_description(e)
+
         entries = OrderedDict() #type: Dict[Hashable, List[Directive]]
         for f in self.files:
             f_entries = self.importer.extract(f, existing_entries=journal.entries)
@@ -95,10 +98,8 @@ class ImporterSource(DescriptionBasedSource):
             if isinstance(posting.meta, dict):
                 posting.meta["source_desc"] = entry.narration
                 posting.meta["date"] = entry.date
-                break
             else:
                 to_mutate.append(i)
-                break
         for i in to_mutate:
             p = postings.pop(i)
             p = Posting(p.account, p.units, p.cost, p.price, p.flag,
@@ -147,6 +148,8 @@ def get_info(raw_entry: Directive) -> dict:
 
 def balance_amounts(txn:Transaction)-> None:
     """Add FIXME account for the remaing amount to balance accounts"""
+    if len(txn.postings) > 1:
+        return
     inventory = SimpleInventory()
     for posting in txn.postings:
         inventory += get_weight(convert_costspec_to_cost(posting))
